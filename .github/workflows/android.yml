@@ -1,0 +1,179 @@
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "17"
+  BUILD_TOOLS: "36.0.0"
+  APK: app/build/outputs/apk/release/app-release.apk
+  AAB: app/build/outputs/bundle/release/app-release.aab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Focused unit tests
+        run: ./gradlew --no-daemon testDebugUnitTest
+
+      - name: Release lint
+        run: ./gradlew --no-daemon lintRelease
+
+      - name: Room schema export
+        run: |
+          SCHEMA_DIR=app/schemas/com.egrmeister.roomresetmini.data.local.AppDatabase
+          ls -la "$SCHEMA_DIR"
+          test -f "$SCHEMA_DIR/1.json" || { echo "::error::Room schema 1.json was not exported"; exit 1; }
+          if [ -n "$(git status --porcelain app/schemas)" ]; then
+            echo "::warning::Room schema files differ from the committed ones — commit app/schemas."
+            echo "----- BEGIN 1.json -----"
+            cat "$SCHEMA_DIR/1.json"
+            echo "----- END 1.json -----"
+          fi
+
+      - name: Check for signing secrets
+        id: secrets
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KSP: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KA: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KP: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS" ] && [ -n "$KSP" ] && [ -n "$KA" ] && [ -n "$KP" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "::warning::Signing secrets are not available to pull requests; signed release steps skipped."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Signing secrets are missing. Add ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD in Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Decode keystore (temporary)
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set +x
+          KS_PATH="$RUNNER_TEMP/roomresetmini-release.p12"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > "$KS_PATH"
+          chmod 600 "$KS_PATH"
+          echo "ANDROID_KEYSTORE_FILE=$KS_PATH" >> "$GITHUB_ENV"
+
+      # Step 1: signed NON-minified release, fully verified first.
+      - name: Build signed non-minified release APK and AAB
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon assembleRelease bundleRelease -ProomresetMinify=false
+          mkdir -p dist/nonminified
+          cp "$APK" dist/nonminified/RoomResetMini-1.0.0-nonminified.apk
+          cp "$AAB" dist/nonminified/RoomResetMini-1.0.0-nonminified.aab
+
+      - name: Verify non-minified release
+        if: steps.secrets.outputs.present == 'true'
+        run: |
+          chmod +x scripts/verify-release.sh
+          scripts/verify-release.sh dist/nonminified/RoomResetMini-1.0.0-nonminified.apk \
+            dist/nonminified/RoomResetMini-1.0.0-nonminified.aab dist/nonminified/checks non-minified
+
+      - name: Check merged release manifest
+        if: steps.secrets.outputs.present == 'true'
+        run: |
+          MERGED=$(find app/build/intermediates -path "*release*" -name AndroidManifest.xml | grep -i merged_manifest | head -1)
+          echo "Merged manifest: $MERGED"
+          test -n "$MERGED" || { echo "::error::merged release manifest not found"; exit 1; }
+          PERMS=$(grep -oE 'uses-permission[^>]*android:name="[^"]+"' "$MERGED" | sed 's/.*android:name="//;s/"//' | sort -u || true)
+          echo "Merged permissions: ${PERMS:-<none>}"
+          for p in $PERMS; do
+            case "$p" in
+              *.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION) ;;
+              *) echo "::error::Unexpected permission in merged manifest: $p"; exit 1 ;;
+            esac
+          done
+
+      # Step 2: only after the non-minified release passed, build with R8 + resource shrinking.
+      - name: Build signed R8-minified release APK and AAB
+        if: steps.secrets.outputs.present == 'true'
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon assembleRelease bundleRelease -ProomresetMinify=true
+          mkdir -p dist/play
+          cp "$APK" dist/play/RoomResetMini-1.0.0.apk
+          cp "$AAB" dist/play/RoomResetMini-1.0.0.aab
+          cp app/build/outputs/mapping/release/mapping.txt dist/play/mapping.txt
+
+      - name: Verify R8-minified release
+        if: steps.secrets.outputs.present == 'true'
+        run: |
+          scripts/verify-release.sh dist/play/RoomResetMini-1.0.0.apk dist/play/RoomResetMini-1.0.0.aab \
+            dist/play/checks minified
+          {
+            echo "# RoomReset Mini release (commit $GITHUB_SHA)"
+            echo
+            echo "Upload ONLY dist/play/RoomResetMini-1.0.0.aab to Google Play."
+            echo
+            cat dist/nonminified/checks/report.md
+            echo
+            cat dist/play/checks/report.md
+          } | tee dist/release-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload verified artifacts
+        if: steps.secrets.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: roomresetmini-release-${{ github.run_number }}
+          if-no-files-found: error
+          path: dist/
+
+      - name: Upload Room schemas and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roomresetmini-schemas-and-reports-${{ github.run_number }}
+          if-no-files-found: ignore
+          path: |
+            app/schemas/
+            app/build/reports/
+
+      - name: Remove signing material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/roomresetmini-release.p12"

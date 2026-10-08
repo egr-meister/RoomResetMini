@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Small top-down room tile (desk, wardrobe, shelf) with a checkmark. 108dp canvas, art inside the 66dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#E9DCC4"
+        android:strokeColor="#B9A27A"
+        android:strokeWidth="2"
+        android:pathData="M35,30h38a5,5 0,0 1,5 5v38a5,5 0,0 1,-5 5h-38a5,5 0,0 1,-5 -5v-38a5,5 0,0 1,5 -5z" />
+    <path
+        android:fillColor="#CDB994"
+        android:pathData="M36,36h24v7h-24z" />
+    <path
+        android:fillColor="#CDB994"
+        android:pathData="M64,36h8v20h-8z" />
+    <path
+        android:fillColor="#CDB994"
+        android:pathData="M36,68h14v4h-14z" />
+    <path
+        android:fillColor="#3F5E45"
+        android:pathData="M63,52a11,11 0,1 1,0 22a11,11 0,1 1,0 -22z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M57.5,63.5l3.8,3.8l7.2,-7.6" />
+</vector>
