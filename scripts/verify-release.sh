@@ -62,7 +62,8 @@ for p in $USED; do
   [ "$p" = "$ALLOWED" ] || fail "Unexpected permission in APK: $p"
 done
 for forbidden in android.permission.INTERNET android.permission.ACCESS_NETWORK_STATE android.permission.CAMERA \
-  android.permission.RECORD_AUDIO android.permission.ACCESS_FINE_LOCATION android.permission.POST_NOTIFICATIONS; do
+  android.permission.RECORD_AUDIO android.permission.ACCESS_FINE_LOCATION android.permission.ACCESS_COARSE_LOCATION \
+  android.permission.READ_EXTERNAL_STORAGE android.permission.WRITE_EXTERNAL_STORAGE android.permission.POST_NOTIFICATIONS; do
   grep -q "$forbidden" "$OUT/packaged-permissions.txt" && fail "Forbidden permission present: $forbidden"
 done
 "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" > "$OUT/packaged-manifest.txt"

@@ -3,26 +3,11 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-      RoomReset Mini declares NO permissions. The entries below defensively strip
-      anything a dependency might try to merge in; CI fails if any permission other
-      than the AndroidX-internal DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION appears.
+      RoomReset Mini declares NO permissions and requests none at runtime.
+      CI fails the build if the merged manifest or the packaged APK contains any
+      permission other than the AndroidX-internal DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+      (see scripts/verify-release.sh and .github/workflows/android.yml).
     -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" tools:node="remove" />
-    <uses-permission android:name="android.permission.CAMERA" tools:node="remove" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" tools:node="remove" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" tools:node="remove" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM" tools:node="remove" />
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" tools:node="remove" />
-    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
     <application
         android:name=".RoomResetApp"

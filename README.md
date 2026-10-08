@@ -183,7 +183,8 @@ remaining = remainingAtCheckpoint − (elapsedRealtimeNow − checkpointElapsedR
 
 ## Permission verification
 
-The manifest declares no permissions and strips common ones with `tools:node="remove"`. CI fails if:
+The manifest declares no permissions (no `tools:node="remove"` placeholders either — lint treats a
+CAMERA entry as implying camera hardware). CI fails if:
 
 - the packaged APK (`aapt2 dump permissions`) contains any `uses-permission` other than the
   AndroidX-internal `<applicationId>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`;
